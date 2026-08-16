@@ -665,8 +665,7 @@ function updateBullets(dt){
       else if (rect.x+rect.w>W){ b.x=W-3; b.vx=-Math.abs(b.vx); }
       if (rect.y<0){ b.y=3; b.vy=Math.abs(b.vy); }
       else if (rect.y+rect.h>H){ b.y=H-3; b.vy=-Math.abs(b.vy); }
-      Audio.hit();
-      continue;   // 反弹本帧跳过碰撞检测
+      continue;   // 反弹本帧跳过碰撞检测（反弹不播放音效）
     }
     // 撞墙
     const hit = collidesMap(rect);
@@ -1589,12 +1588,14 @@ const game = {
   status:'MENU', score:0, wave:0, mode:'infinite', level:1,
   player:null, player2:null, enemies:[], spawnQueue:[], pending:0,
   itemTimer:0, freezeT:0, bossDefeated:false, spawnTimer:1, bossCount:0,
+  waveCleared:false,
 };
 let screenFlash=0;
 let shake=0;   // 屏幕震动幅度（Boss 出现/弹幕时触发）
 
 function resetGame(){
   game.score=0;
+  game.waveCleared=false;   // 重置波次完成标志，避免上一局残留导致新局不进入下一波
   // 闯关模式：关卡号即波次；其余模式从 0 起，由 startWave 自增到第 1 波
   game.wave = game.mode==='campaign' ? game.level : 0;
   game.enemies=[]; bullets.length=0; particles.length=0; items.length=0; floats.length=0;
@@ -1753,13 +1754,13 @@ function update(dt){
       game.score+=100;
       if (game.mode==='campaign'){
         unlockLevel(game.level+1);   // 解锁下一关
-        setTimeout(()=>{ game.status='PLAYING'; win(); }, 300);
+        setTimeout(()=>{ if (game.status!=='PLAYING') return; game.status='PLAYING'; win(); }, 300);
       } else {
         const total = (MODES[game.mode]||{}).totalWave||0;
         if (total>0 && game.wave>=total){
-          setTimeout(()=>{ game.status='PLAYING'; win(); }, 300);
+          setTimeout(()=>{ if (game.status!=='PLAYING') return; game.status='PLAYING'; win(); }, 300);
         } else {
-          setTimeout(()=>{ game.waveCleared=false; startWave(); }, 1200);
+          setTimeout(()=>{ if (game.status!=='PLAYING') return; game.waveCleared=false; startWave(); }, 1200);
         }
       }
     }
