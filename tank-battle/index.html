@@ -406,11 +406,11 @@ const TANKS = [
 const TANKS_BY_ID = Object.fromEntries(TANKS.map(t=>[t.id,t]));
 
 // 存档（本地数据库，使用 localStorage 持久化）
-// 【测试模式】version 已升级：首次加载直接开放全部武器/坦克并赠送大量金币，便于试玩
+// version 升级会重置旧存档（含测试期的 99999 金币）
 const DB = {
   key:'cyber_tank_save',
-  version:'test-tank-v2',
-  default(){ return {version:this.version, gold:99999, owned:WEAPONS.map(w=>w.id), equipped:'assault', tanks:TANKS.map(t=>t.id), tank:'dash', levelUnlocked:1}; },
+  version:'tank-v3',
+  default(){ return {version:this.version, gold:0, owned:['assault'], equipped:'assault', tanks:['dash'], tank:'dash', levelUnlocked:1}; },
   load(){
     const def=this.default();
     try {
@@ -2181,21 +2181,27 @@ document.getElementById('shopBack').addEventListener('click', closeShop);
 document.getElementById('shopClose').addEventListener('click', closeShop);
 
 /* ---------- 15c. 技能触发 ---------- */
-// 【测试模式】TEST_NO_SKILL_CD=true 时技能无冷却可无限释放，便于测试后期效果；测试完改回 false 即可恢复
-const TEST_NO_SKILL_CD = true;
+// 技能冷却已恢复正常（原为测试模式无限释放）
+const TEST_NO_SKILL_CD = false;
 function triggerSkill(p){
   p = p || game.player;
   if (!p||game.status!=='PLAYING'&&game.status!=='PAUSED') return;
   if (p.skillCd>0) return;
   const tk = TANKS_BY_ID[p.tank];
   if (!tk||!tk.skill) return;
-  if (!TEST_NO_SKILL_CD) p.skillCd = tk.skillCd;   // 测试模式：不设冷却
+  if (!TEST_NO_SKILL_CD) p.skillCd = tk.skillCd;   // 正常冷却
   tk.skill(p);
   Audio.pickup();
   showWarn(tk.skillName+'！', tk.color, 45);
 }
 // 键盘 K 键触发 P1 技能，L 键触发 P2 技能（双人模式）
 window.addEventListener('keydown', e=>{
+  // 防止空格/回车激活聚焦的按钮（如技能按钮），避免空格误释放技能
+  if ((e.code==='Space'||e.code==='Enter') && document.activeElement && document.activeElement.tagName==='BUTTON'){
+    e.preventDefault();
+    document.activeElement.blur();
+    return;
+  }
   if (e.code==='KeyK'){ Audio.init(); triggerSkill(game.player); }
   if (e.code==='KeyL' && game.mode==='coop' && game.player2){ Audio.init(); triggerSkill(game.player2); }
 });
@@ -2214,7 +2220,7 @@ window.addEventListener('keydown', e=>{
     if (game.player.skillCd>0){ btn.textContent+=' ('+Math.ceil(game.player.skillCd)+'s)'; btn.style.opacity='0.5'; }
     else { btn.style.opacity='1'; }
   }
-  btn.addEventListener('click', ()=>triggerSkill(game.player));
+  btn.addEventListener('click', ()=>{ btn.blur(); triggerSkill(game.player); });
   btn.addEventListener('touchstart', e=>{ e.preventDefault(); triggerSkill(game.player); });
   document.body.appendChild(btn);
   // 定期更新技能按钮（技能名 + 冷却）
