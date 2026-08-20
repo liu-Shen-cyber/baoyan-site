@@ -119,6 +119,15 @@ body.touch #touchUI{display:block;}
   padding:1px 6px;color:var(--neon-cyan);font-family:inherit;
 }
 #startBtn{font-size:16px;padding:10px 34px;margin-top:6px;}
+/* 我要开挂按钮：金色霓虹，区别于普通菜单按钮 */
+#cheatBtn{
+  font-size:15px;padding:10px 26px;margin-top:2px;
+  color:#ffd700;border-color:#ffd700;
+  box-shadow:0 0 10px rgba(255,215,0,0.5), inset 0 0 10px rgba(255,215,0,0.15);
+  text-shadow:0 0 8px #ffd700;
+}
+#cheatBtn:not(:disabled):hover{box-shadow:0 0 16px rgba(255,215,0,0.8), inset 0 0 12px rgba(255,215,0,0.25);}
+#cheatBtn:disabled{opacity:0.55;cursor:default;}
 
 /* ============ 模式选择 ============ */
 #modeOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.78);z-index:30;backdrop-filter:blur(3px);}
@@ -189,8 +198,31 @@ body.touch #touchUI{display:block;}
 .tk-stats span{white-space:nowrap;}
 .tk-stats b{color:var(--text);}
 #tankList .tk-icon{display:block;margin:0 auto 6px;width:56px;height:40px;}
-/* 菜单按钮组 */
-.menu-row{display:flex;gap:12px;justify-content:center;margin-top:10px;}
+/* 菜单按钮组（窄屏自动换行，避免挤压溢出） */
+.menu-row{display:flex;gap:12px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+
+/* ============ 技能按钮（桌面：右下角；触屏：开火键上方，避免重叠） ============ */
+#skillBtn{
+  position:fixed;right:10px;bottom:80px;z-index:10;
+  font-size:14px;padding:8px 14px;border-radius:10px;white-space:nowrap;
+}
+/* 触屏端：置于开火键正上方（开火键顶边距底约146px，留出间隙） */
+body.touch #skillBtn{
+  right:30px;bottom:calc(160px + env(safe-area-inset-bottom,0px));
+  min-width:92px;max-width:150px;overflow:hidden;text-overflow:ellipsis;
+  padding:10px 14px;font-size:13px;border-radius:14px;text-align:center;
+}
+
+/* ============ 手机端适配 ============ */
+/* 触屏控件避开 iPhone 底部手势条 */
+body.touch #fireBtn{bottom:calc(60px + env(safe-area-inset-bottom,0px));}
+body.touch #joyBase{bottom:calc(70px + env(safe-area-inset-bottom,0px));}
+/* 窄屏：菜单按钮缩小，面板不溢出 */
+@media (max-width:420px){
+  .menu-row{gap:8px;}
+  .menu-row .neon{font-size:14px !important;padding:9px 14px !important;}
+  #panel{padding:20px 14px;}
+}
 </style>
 </head>
 <body>
@@ -241,6 +273,9 @@ body.touch #touchUI{display:block;}
       <button class="neon" id="shopBtn" style="font-size:15px;padding:10px 22px;">武器库</button>
       <button class="neon" id="tankBtn" style="font-size:15px;padding:10px 22px;">坦克库</button>
       <button class="neon" id="startBtn" style="font-size:16px;padding:10px 30px;">开始游戏</button>
+    </div>
+    <div class="menu-row">
+      <button class="neon" id="cheatBtn" title="解锁全部武器与坦克，技能无冷却">👑 我要开挂</button>
     </div>
   </div>
 </div>
@@ -410,7 +445,7 @@ const TANKS_BY_ID = Object.fromEntries(TANKS.map(t=>[t.id,t]));
 const DB = {
   key:'cyber_tank_save',
   version:'tank-v3',
-  default(){ return {version:this.version, gold:0, owned:['assault'], equipped:'assault', tanks:['dash'], tank:'dash', levelUnlocked:1}; },
+  default(){ return {version:this.version, gold:0, owned:['assault'], equipped:'assault', tanks:['dash'], tank:'dash', levelUnlocked:1, cheat:false}; },
   load(){
     const def=this.default();
     try {
@@ -2190,7 +2225,7 @@ function triggerSkill(p){
   if (p.skillCd>0) return;
   const tk = TANKS_BY_ID[p.tank];
   if (!tk||!tk.skill) return;
-  if (!TEST_NO_SKILL_CD) p.skillCd = tk.skillCd;   // 正常冷却
+  if (!TEST_NO_SKILL_CD && !DB.load().cheat) p.skillCd = tk.skillCd;   // 正常冷却（开挂模式无冷却）
   tk.skill(p);
   Audio.pickup();
   showWarn(tk.skillName+'！', tk.color, 45);
@@ -2211,7 +2246,7 @@ window.addEventListener('keydown', e=>{
   const btn=document.createElement('button');
   btn.id='skillBtn'; btn.className='neon';
   btn.textContent='技能';
-  btn.style.cssText='position:fixed;right:10px;bottom:80px;z-index:10;font-size:14px;padding:8px 14px;border-radius:10px;';
+  // 定位样式交给 CSS：桌面右下角 / 触屏端开火键上方（body.touch 区分），避免与开火键重叠
   // 游戏内更新技能按钮冷却显示
   function updateSkillBtn(){
     if (!game.player||game.status==='MENU'){ btn.style.display='none'; return; }
@@ -2279,6 +2314,31 @@ function closeTankShop(){
 document.getElementById('tankBtn').addEventListener('click', openTankShop);
 document.getElementById('tankBack').addEventListener('click', closeTankShop);
 document.getElementById('tankClose').addEventListener('click', closeTankShop);
+
+/* ---------- 15d. 我要开挂 ---------- */
+// 一键开挂：解锁全部武器与坦克 + 技能无冷却（写入存档，重启后依然生效）
+function setCheatBtnOn(){
+  const btn=document.getElementById('cheatBtn');
+  if (!btn) return;
+  btn.textContent='✔ 外挂已开启';
+  btn.disabled=true;
+}
+function cheatOn(){
+  const db=DB.load();
+  if (!db.cheat){
+    for (const w of WEAPONS) if (!db.owned.includes(w.id)) db.owned.push(w.id);
+    for (const t of TANKS) if (!db.tanks.includes(t.id)) db.tanks.push(t.id);
+    db.cheat=true;
+    DB.save(db);
+    updateHudGold();
+    Audio.init(); Audio.pickup();
+    showWarn('外挂已开启！全武器 · 全坦克 · 技能无冷却', '#ffd700', 40);
+  }
+  setCheatBtnOn();
+}
+document.getElementById('cheatBtn').addEventListener('click', cheatOn);
+// 存档中已开挂时，按钮直接显示开启状态
+if (DB.load().cheat) setCheatBtnOn();
 
 /* ---------- 16. 启动 ---------- */
 // 模式选择面板：填充四种模式的卡片
